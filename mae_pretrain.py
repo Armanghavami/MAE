@@ -6,6 +6,12 @@ import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import ToTensor, Compose, Normalize
 from tqdm import tqdm
+from torch.utils.data import Dataset, DataLoader
+from PIL import Image
+import os
+from torch.utils.data import random_split
+
+from torchvision import transforms
 
 from model import *
 from utils import setup_seed
@@ -32,9 +38,63 @@ if __name__ == '__main__':
     assert batch_size % load_batch_size == 0
     steps_per_update = batch_size // load_batch_size
 
+    '''
     train_dataset = torchvision.datasets.CIFAR10('data', train=True, download=True, transform=Compose([ToTensor(), Normalize(0.5, 0.5)]))
     val_dataset = torchvision.datasets.CIFAR10('data', train=False, download=True, transform=Compose([ToTensor(), Normalize(0.5, 0.5)]))
-    dataloader = torch.utils.data.DataLoader(train_dataset, load_batch_size, shuffle=True, num_workers=4)
+        '''
+    
+
+
+    your_transforms = transforms.Compose([
+        transforms.ToTensor(),                       # Convert PIL image to PyTorch tensor
+        transforms.Normalize(mean=[0.5],    # Normalize each channel
+                            std=[0.5])
+    ])
+    class MedicalImageDataset(Dataset):
+        def __init__(self, folder_path, transform=None):
+            self.folder_path = folder_path
+            self.image_paths = self.load_images(folder_path)
+            self.transform = transform
+
+        def load_images(self, folder_path):
+            # Get all images in folder with common extensions
+            valid_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.tiff')
+            return [os.path.join(folder_path, f) 
+                    for f in os.listdir(folder_path) 
+                    if f.lower().endswith(valid_extensions)]
+
+        def __len__(self):
+            return len(self.image_paths)
+
+        def __getitem__(self, idx):
+            img_path = self.image_paths[idx]
+            image = Image.open(img_path).convert("RGB")  # ensure 3 channels
+            if self.transform:
+                image = self.transform(image)
+            return image
+
+    # Load dataset
+    dataset = MedicalImageDataset(folder_path='/Users/arman/Desktop/longe/images', transform=your_transforms)
+
+    # Split into train/test
+    train_size = int(0.8 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+    # DataLoaders
+    load_batch_size = 64
+    train_dataset = DataLoader(train_dataset, batch_size=load_batch_size, shuffle=True, num_workers=0)
+    val_dataset = DataLoader(test_dataset, batch_size=load_batch_size, shuffle=False, num_workers=0)
+
+    # Example check
+    print(f"Train batches: {len(train_dataset)}, Test batches: {len(val_dataset)}")
+
+
+
+
+    #dataloader = torch.utils.data.DataLoader(train_dataset, load_batch_size, shuffle=True, num_workers=4)
+
+
     writer = SummaryWriter(os.path.join('logs', 'cifar10', 'mae-pretrain'))
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -48,7 +108,9 @@ if __name__ == '__main__':
     for e in range(args.total_epoch):
         model.train()
         losses = []
-        for img, label in tqdm(iter(dataloader)):
+        for img in tqdm(iter(train_dataset)):
+            # for img, label in tqdm(iter(train_dataset)):
+
             step_count += 1
             img = img.to(device)
             predicted_img, mask = model(img)
@@ -76,3 +138,11 @@ if __name__ == '__main__':
         
         ''' save model '''
         torch.save(model, args.model_path)
+        # Assume model is your MAE model
+        encoder = model.encoder
+
+        for param in encoder.parameters():
+            param.requires_grad = False
+
+        # Save the frozen encoder
+        torch.save(encoder.state_dict(), 'mae_encoder_frozen.pth')

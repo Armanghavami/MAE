@@ -37,8 +37,8 @@ class PatchShuffle(torch.nn.Module):
 
 class MAE_Encoder(torch.nn.Module):
     def __init__(self,
-                 image_size=32,
-                 patch_size=2,
+                 image_size=1024,
+                 patch_size=8,
                  emb_dim=192,
                  num_layer=12,
                  num_head=3,
@@ -47,7 +47,13 @@ class MAE_Encoder(torch.nn.Module):
         super().__init__()
 
         self.cls_token = torch.nn.Parameter(torch.zeros(1, 1, emb_dim))
-        self.pos_embedding = torch.nn.Parameter(torch.zeros((image_size // patch_size) ** 2, 1, emb_dim))
+        #self.pos_embedding = torch.nn.Parameter(torch.zeros((image_size // patch_size) ** 2, 1, emb_dim))
+
+        self.num_patches = (image_size // patch_size) ** 2
+        #self.pos_embedding = torch.nn.Parameter(torch.zeros(1, self.num_patches, emb_dim))
+        self.pos_embedding = torch.nn.Parameter(torch.zeros(self.num_patches, 1, emb_dim))
+
+
         self.shuffle = PatchShuffle(mask_ratio)
 
         self.patchify = torch.nn.Conv2d(3, emb_dim, patch_size, patch_size)
@@ -78,8 +84,8 @@ class MAE_Encoder(torch.nn.Module):
 
 class MAE_Decoder(torch.nn.Module):
     def __init__(self,
-                 image_size=32,
-                 patch_size=2,
+                 image_size=1024,
+                 patch_size=8,
                  emb_dim=192,
                  num_layer=4,
                  num_head=3,
@@ -123,8 +129,8 @@ class MAE_Decoder(torch.nn.Module):
 
 class MAE_ViT(torch.nn.Module):
     def __init__(self,
-                 image_size=32,
-                 patch_size=2,
+                 image_size=1024,
+                 patch_size=8,
                  emb_dim=192,
                  encoder_layer=12,
                  encoder_head=3,
